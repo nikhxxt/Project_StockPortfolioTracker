@@ -1,95 +1,147 @@
 import streamlit as st
 import requests
 
+
+# ==============================
+# API KEY
+# ==============================
+
 API_KEY = st.secrets["ALPHA_VANTAGE_API_KEY"]
 
 
+# ==============================
+# GET STOCK PRICE
+# ==============================
+
+@st.cache_data(ttl=300)
+def get_stock_price(symbol):
+
+    url = (
+        "https://www.alphavantage.co/query"
+        f"?function=GLOBAL_QUOTE"
+        f"&symbol={symbol}"
+        f"&apikey={API_KEY}"
+    )
+
+    try:
+        response = requests.get(url, timeout=10)
+        data = response.json()
+
+        # Check if Alpha Vantage returned a valid quote
+        quote = data.get("Global Quote", {})
+
+        price = quote.get("05. price")
+
+        if price:
+            return float(price)
+
+        return None
+
+    except Exception:
+        return None
+
+
+# ==============================
+# PORTFOLIO CLASS
+# ==============================
+
 class Portfolio:
+
     def __init__(self):
         self.holdings = {}
 
+    # Add stock
     def add_stock(self, symbol, shares, price_per_share):
+
         if symbol in self.holdings:
+
             old_shares = self.holdings[symbol]["shares"]
             old_cost = self.holdings[symbol]["cost_basis"]
 
-            total_cost = (old_shares * old_cost) + (shares * price_per_share)
+            total_cost = (
+                old_shares * old_cost
+                + shares * price_per_share
+            )
+
             total_shares = old_shares + shares
 
             self.holdings[symbol]["shares"] = total_shares
-            self.holdings[symbol]["cost_basis"] = total_cost / total_shares
+
+            self.holdings[symbol]["cost_basis"] = (
+                total_cost / total_shares
+            )
 
         else:
+
             self.holdings[symbol] = {
                 "shares": shares,
                 "cost_basis": price_per_share
             }
 
+    # Remove stock
     def remove_stock(self, symbol, shares):
+
         if symbol in self.holdings:
-            if shares >= self.holdings[symbol]["shares"]:
+
+            current_shares = self.holdings[symbol]["shares"]
+
+            if shares >= current_shares:
+
                 del self.holdings[symbol]
+
             else:
+
                 self.holdings[symbol]["shares"] -= shares
 
+    # Get current price
     def get_stock_quote(self, symbol):
-        url = (
-            "https://www.alphavantage.co/query"
-            f"?function=GLOBAL_QUOTE"
-            f"&symbol={symbol}"
-            f"&apikey={API_KEY}"
-        )
 
-        try:
-            response = requests.get(url, timeout=10)
-            data = response.json()
-
-            quote = data.get("Global Quote", {})
-            price = quote.get("05. price")
-
-            if price:
-                return float(price)
-
-            return None
-
-        except Exception:
-            return None
+        return get_stock_price(symbol)
 
 
-# -----------------------------
-# PAGE
-# -----------------------------
+# ==============================
+# STREAMLIT PAGE
+# ==============================
 
 st.set_page_config(
     page_title="Stock Portfolio Tracker",
-    page_icon="📈"
+    page_icon="📈",
+    layout="centered"
 )
 
+
 st.title("📈 Stock Portfolio Tracker")
-st.write("Track your stocks and calculate your portfolio value.")
+
+st.write(
+    "Track your stocks, shares, purchase prices, "
+    "and current portfolio value."
+)
 
 
-# -----------------------------
+# ==============================
 # SESSION STATE
-# -----------------------------
+# ==============================
 
 if "portfolio" not in st.session_state:
+
     st.session_state.portfolio = Portfolio()
+
 
 portfolio = st.session_state.portfolio
 
 
-# -----------------------------
+# ==============================
 # ADD STOCK
-# -----------------------------
+# ==============================
 
 st.header("➕ Add Stock")
+
 
 with st.form("add_stock_form"):
 
     symbol = st.text_input(
         "Stock Symbol",
-        placeholder="Example: IBM"
+        placeholder="Example: IBM, META, AAPL"
     ).strip().upper()
 
     shares = st.number_input(
@@ -106,15 +158,21 @@ with st.form("add_stock_form"):
         step=0.01
     )
 
-    add_button = st.form_submit_button("Add Stock")
+    add_button = st.form_submit_button(
+        "Add Stock"
+    )
 
 
 if add_button:
 
     if symbol == "":
-        st.warning("Please enter a stock symbol.")
+
+        st.warning(
+            "Please enter a stock symbol."
+        )
 
     else:
+
         portfolio.add_stock(
             symbol,
             shares,
@@ -126,16 +184,17 @@ if add_button:
         )
 
 
-# -----------------------------
+# ==============================
 # REMOVE STOCK
-# -----------------------------
+# ==============================
 
 st.header("➖ Remove Stock")
+
 
 with st.form("remove_stock_form"):
 
     remove_symbol = st.text_input(
-        "Stock Symbol to Remove",
+        "Stock Symbol",
         placeholder="Example: IBM"
     ).strip().upper()
 
@@ -146,21 +205,33 @@ with st.form("remove_stock_form"):
         step=1
     )
 
-    remove_button = st.form_submit_button("Remove Stock")
+    remove_button = st.form_submit_button(
+        "Remove Stock"
+    )
 
 
 if remove_button:
 
-    if remove_symbol not in portfolio.holdings:
+    if remove_symbol == "":
+
+        st.warning(
+            "Please enter a stock symbol."
+        )
+
+    elif remove_symbol not in portfolio.holdings:
 
         st.warning(
             "Stock not found in your portfolio."
         )
 
-    elif remove_shares > portfolio.holdings[remove_symbol]["shares"]:
+    elif (
+        remove_shares
+        > portfolio.holdings[remove_symbol]["shares"]
+    ):
 
         st.warning(
-            "You cannot remove more shares than you own."
+            "You cannot remove more shares "
+            "than you own."
         )
 
     else:
@@ -171,17 +242,21 @@ if remove_button:
         )
 
         st.success(
-            f"Removed {remove_shares} shares of {remove_symbol}."
+            f"Removed {remove_shares} shares "
+            f"of {remove_symbol}."
         )
 
 
-# -----------------------------
+# ==============================
 # CURRENT PORTFOLIO
-# -----------------------------
+# ==============================
 
 st.header("📊 Current Portfolio")
 
+
 if portfolio.holdings:
+
+    total_portfolio_value = 0
 
     for symbol, data in portfolio.holdings.items():
 
@@ -192,46 +267,72 @@ if portfolio.holdings:
         )
 
         st.write(
-            f"**Average Cost:** ${data['cost_basis']:.2f}"
+            f"**Average Cost:** "
+            f"${data['cost_basis']:.2f}"
         )
 
-        current_price = portfolio.get_stock_quote(symbol)
+        current_price = portfolio.get_stock_quote(
+            symbol
+        )
 
         if current_price is not None:
 
             current_value = (
-                current_price * data["shares"]
+                current_price
+                * data["shares"]
+            )
+
+            total_portfolio_value += current_value
+
+            st.write(
+                f"**Current Price:** "
+                f"${current_price:.2f}"
             )
 
             st.write(
-                f"**Current Price:** ${current_price:.2f}"
-            )
-
-            st.write(
-                f"**Current Value:** ${current_value:.2f}"
+                f"**Current Value:** "
+                f"${current_value:,.2f}"
             )
 
         else:
 
             st.warning(
-                f"Could not fetch the current price for {symbol}."
+                f"Could not fetch the current price "
+                f"for {symbol}."
             )
 
         st.divider()
 
-else:
 
-    st.info(
-        "Your portfolio is empty. Add a stock to get started."
+    # Total portfolio value
+
+    st.subheader(
+        f"💰 Total Portfolio Value: "
+        f"${total_portfolio_value:,.2f}"
     )
 
 
-# -----------------------------
+else:
+
+    st.info(
+        "Your portfolio is empty. "
+        "Add a stock to get started."
+    )
+
+
+# ==============================
 # CLEAR PORTFOLIO
-# -----------------------------
+# ==============================
+
+st.header("⚙️ Portfolio Settings")
+
 
 if st.button("🔄 Clear Portfolio"):
 
     st.session_state.portfolio = Portfolio()
+
+    st.success(
+        "Portfolio cleared successfully."
+    )
 
     st.rerun()
