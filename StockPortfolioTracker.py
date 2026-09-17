@@ -10,7 +10,7 @@ API_KEY = st.secrets["ALPHA_VANTAGE_API_KEY"]
 
 
 # ==============================
-# GET STOCK PRICE
+# GET STOCK PRICE / VALIDATE SYMBOL
 # ==============================
 
 @st.cache_data(ttl=300)
@@ -27,8 +27,12 @@ def get_stock_price(symbol):
         response = requests.get(url, timeout=10)
         data = response.json()
 
-        # Check if Alpha Vantage returned a valid quote
+        # Check if Alpha Vantage returned a quote
         quote = data.get("Global Quote", {})
+
+        # No quote = invalid/unavailable symbol
+        if not quote:
+            return None
 
         price = quote.get("05. price")
 
@@ -50,7 +54,10 @@ class Portfolio:
     def __init__(self):
         self.holdings = {}
 
-    # Add stock
+    # --------------------------
+    # ADD STOCK
+    # --------------------------
+
     def add_stock(self, symbol, shares, price_per_share):
 
         if symbol in self.holdings:
@@ -78,7 +85,10 @@ class Portfolio:
                 "cost_basis": price_per_share
             }
 
-    # Remove stock
+    # --------------------------
+    # REMOVE STOCK
+    # --------------------------
+
     def remove_stock(self, symbol, shares):
 
         if symbol in self.holdings:
@@ -93,7 +103,10 @@ class Portfolio:
 
                 self.holdings[symbol]["shares"] -= shares
 
-    # Get current price
+    # --------------------------
+    # GET CURRENT PRICE
+    # --------------------------
+
     def get_stock_quote(self, symbol):
 
         return get_stock_price(symbol)
@@ -114,7 +127,7 @@ st.title("📈 Stock Portfolio Tracker")
 
 st.write(
     "Track your stocks, shares, purchase prices, "
-    "and current portfolio value."
+    "and current market value."
 )
 
 
@@ -141,7 +154,7 @@ with st.form("add_stock_form"):
 
     symbol = st.text_input(
         "Stock Symbol",
-        placeholder="Example: IBM, META, AAPL"
+        placeholder="Example: IBM, GOOGL, META, AAPL"
     ).strip().upper()
 
     shares = st.number_input(
@@ -173,15 +186,33 @@ if add_button:
 
     else:
 
-        portfolio.add_stock(
-            symbol,
-            shares,
-            price
-        )
+        # Validate stock symbol before adding
+        current_price = get_stock_price(symbol)
 
-        st.success(
-            f"Added {shares} shares of {symbol}."
-        )
+        if current_price is None:
+
+            st.error(
+                f"❌ Invalid or unavailable stock symbol: {symbol}"
+            )
+
+            st.info(
+                "Please enter a valid ticker symbol, "
+                "such as AAPL, GOOGL, META, MSFT, IBM, "
+                "AMZN, TSLA, or NVDA."
+            )
+
+        else:
+
+            portfolio.add_stock(
+                symbol,
+                shares,
+                price
+            )
+
+            st.success(
+                f"✅ Added {shares} shares of "
+                f"{symbol}."
+            )
 
 
 # ==============================
@@ -242,7 +273,7 @@ if remove_button:
         )
 
         st.success(
-            f"Removed {remove_shares} shares "
+            f"✅ Removed {remove_shares} shares "
             f"of {remove_symbol}."
         )
 
@@ -256,7 +287,7 @@ st.header("📊 Current Portfolio")
 
 if portfolio.holdings:
 
-    total_portfolio_value = 0
+    total_portfolio_value = 0.0
 
     for symbol, data in portfolio.holdings.items():
 
@@ -271,6 +302,7 @@ if portfolio.holdings:
             f"${data['cost_basis']:.2f}"
         )
 
+        # Get current market price
         current_price = portfolio.get_stock_quote(
             symbol
         )
@@ -297,14 +329,14 @@ if portfolio.holdings:
         else:
 
             st.warning(
-                f"Could not fetch the current price "
+                f"⚠️ Current price unavailable "
                 f"for {symbol}."
             )
 
         st.divider()
 
 
-    # Total portfolio value
+    # Total value
 
     st.subheader(
         f"💰 Total Portfolio Value: "
