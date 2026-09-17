@@ -1,8 +1,6 @@
-import requests
-from datetime import datetime
+import streamlit as st
 
-
-API_KEY = 'your_alpha_vantage_api_key'
+API_KEY = st.secrets["ALPHA_VANTAGE_API_KEY"]
 
 class Portfolio:
     def __init__(self):
